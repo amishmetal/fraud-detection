@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraud Case Management</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+  header { background: #7f1d1d; color: #fff; padding: 16px 24px; }
+  .stats { display: flex; gap: 12px; padding: 16px 24px; flex-wrap: wrap; }
+  .stat { background: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .stat b { font-size: 24px; display: block; }
+  .card { background: #fff; margin: 0 24px 24px; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; white-space: nowrap; }
+  button { border: 0; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: #fff; }
+  .ok { background: #16a34a; } .bad { background: #dc2626; }
+  select { padding: 4px; }
+</style>
+</head>
+<body>
+<header><h2 style="margin:0">Fraud Case Management</h2>
+<small>Java engine flags transactions &rarr; PostgreSQL &rarr; .NET API for analyst review (auto-refresh 3s)</small></header>
+<div class="stats">
+  <div class="stat"><b id="s-tx">0</b>Transactions</div>
+  <div class="stat"><b id="s-pending">0</b>Pending</div>
+  <div class="stat"><b id="s-approved">0</b>Approved</div>
+  <div class="stat"><b id="s-blocked">0</b>Blocked</div>
+</div>
+<div class="card">
+  <label>Show: <select id="filter" onchange="refresh()">
+    <option>PENDING</option><option>APPROVED</option><option>BLOCKED</option><option>ALL</option></select></label>
+  <table><thead><tr><th>Alert</th><th>Account</th><th>Amount</th><th>Country</th><th>Reason</th><th>Status</th><th>Time</th><th>Action</th></tr></thead>
+  <tbody id="rows"></tbody></table>
+</div>
+<script>
+async function decide(id, decision) {
+  await fetch(`/api/alerts/${id}/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }) });
+  refresh();
+}
+async function refresh() {
+  try {
+    const status = document.getElementById('filter').value;
+    const [alerts, st] = await Promise.all([
+      fetch('/api/alerts?status=' + status).then(r => r.json()),
+      fetch('/api/stats').then(r => r.json())
+    ]);
+    document.getElementById('s-tx').textContent = st.transactions;
+    document.getElementById('s-pending').textContent = st.pending;
+    document.getElementById('s-approved').textContent = st.approved;
+    document.getElementById('s-blocked').textContent = st.blocked;
+    document.getElementById('rows').innerHTML = alerts.map(a => `<tr>
+      <td>#${a.id}</td><td>${a.account_id}</td><td>${Number(a.amount).toLocaleString()}</td><td>${a.country}</td>
+      <td>${a.reason}</td><td>${a.status}</td><td>${new Date(a.created_at).toLocaleTimeString()}</td>
+      <td>${a.status === 'PENDING'
+        ? `<button class="ok" onclick="decide(${a.id},'APPROVED')">Approve</button> <button class="bad" onclick="decide(${a.id},'BLOCKED')">Block</button>`
+        : ''}</td></tr>`).join('');
+  } catch (e) { console.error(e); }
+}
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>
